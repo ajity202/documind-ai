@@ -52,22 +52,14 @@ app.add_middleware(
 # CONFIGURATION
 # =========================================================
 
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-UPLOAD_DIR = os.path.join(
-    PROJECT_ROOT,
-    "data",
-    "uploads"
-)
+if os.getenv("VERCEL"):
+    UPLOAD_DIR = "/tmp/uploads"
+else:
+    UPLOAD_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
 
-os.makedirs(
-    UPLOAD_DIR,
-    exist_ok=True
-)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 # =========================================================
