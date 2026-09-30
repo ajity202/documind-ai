@@ -2,16 +2,28 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 import os
+import sys
 import uuid
 
-from backend.src.pdf_reader import extract_pages_from_pdf
-from backend.src.chunker import chunk_text
-from backend.src.embeddings import create_embeddings
-from backend.src.retriever import Retriever
-from backend.src.qa import (
-    generate_answer,
-    generate_document_suggestions
-)
+# =========================================================
+# PYTHON PATH
+# =========================================================
+
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+
+# =========================================================
+# LOCAL MODULES
+# =========================================================
+
+from src.pdf_reader import extract_pages_from_pdf
+from src.chunker import chunk_text
+from src.embeddings import create_embeddings
+from src.retriever import Retriever
+from src.qa import generate_answer, generate_document_suggestions
 
 
 # =========================================================
@@ -21,7 +33,6 @@ from backend.src.qa import (
 app = FastAPI(
     title="Intelligent Document QA"
 )
-
 
 
 # =========================================================
@@ -41,7 +52,17 @@ app.add_middleware(
 # CONFIGURATION
 # =========================================================
 
-UPLOAD_DIR = "data/uploads"
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+UPLOAD_DIR = os.path.join(
+    PROJECT_ROOT,
+    "data",
+    "uploads"
+)
 
 os.makedirs(
     UPLOAD_DIR,
@@ -86,58 +107,48 @@ async def upload_document(
 
     global suggested_questions
 
-
     # -----------------------------------------------------
     # Validate file
     # -----------------------------------------------------
 
     if not file.filename:
-
         raise HTTPException(
             status_code=400,
             detail="No file selected."
         )
 
-
     if not file.filename.lower().endswith(".pdf"):
-
         raise HTTPException(
             status_code=400,
             detail="Only PDF files are supported."
         )
 
-
     # -----------------------------------------------------
-    # Generate unique document ID
+    # Generate document ID
     # -----------------------------------------------------
 
     document_id = str(
         uuid.uuid4()
     )
 
-
     original_filename = file.filename
-
 
     saved_filename = (
         f"{document_id}_{original_filename}"
     )
-
 
     file_path = os.path.join(
         UPLOAD_DIR,
         saved_filename
     )
 
-
     # -----------------------------------------------------
-    # Read and save uploaded file
+    # Save uploaded PDF
     # -----------------------------------------------------
 
     file_data = await file.read()
 
     file_size = len(file_data)
-
 
     with open(
         file_path,
@@ -145,7 +156,6 @@ async def upload_document(
     ) as buffer:
 
         buffer.write(file_data)
-
 
     # -----------------------------------------------------
     # Extract pages + OCR
@@ -155,14 +165,10 @@ async def upload_document(
         file_path
     )
 
-
     if not pages:
 
         if os.path.exists(file_path):
-
-            os.remove(
-                file_path
-            )
+            os.remove(file_path)
 
         raise HTTPException(
             status_code=400,
@@ -172,110 +178,78 @@ async def upload_document(
             )
         )
 
-
     # -----------------------------------------------------
     # Create page-aware chunks
     # -----------------------------------------------------
 
     chunk_records = []
-
     chunk_texts = []
-
 
     for page in pages:
 
         page_number = page["page"]
-
         page_text = page["text"]
-
 
         page_chunks = chunk_text(
             page_text
         )
 
-
         for chunk in page_chunks:
 
             chunk = chunk.strip()
 
-
             if not chunk:
-
                 continue
 
-
             chunk_records.append({
-
-                "document_id":
-                    document_id,
-
-                "document_name":
-                    original_filename,
-
-                "page":
-                    page_number,
-
-                "text":
-                    chunk
+                "document_id": document_id,
+                "document_name": original_filename,
+                "page": page_number,
+                "text": chunk
             })
-
 
             chunk_texts.append(
                 chunk
             )
 
-
     if not chunk_records:
 
         if os.path.exists(file_path):
-
-            os.remove(
-                file_path
-            )
+            os.remove(file_path)
 
         raise HTTPException(
             status_code=400,
             detail="No usable text chunks were created."
         )
 
-
     # -----------------------------------------------------
-    # Create embeddings
+    # Create Gemini embeddings
     # -----------------------------------------------------
 
     embeddings = create_embeddings(
         chunk_texts
     )
 
-
     # -----------------------------------------------------
-    # Add document to persistent vectorstore
+    # Add document to vectorstore
     # -----------------------------------------------------
 
     retriever.add_document(
-
         document_id=document_id,
-
         filename=original_filename,
-
         file_size=file_size,
-
         chunks=chunk_records,
-
         embeddings=embeddings,
-
         page_count=len(pages)
     )
 
-
     # -----------------------------------------------------
-    # Generate document-specific questions
+    # Generate suggested questions
     # -----------------------------------------------------
 
     print(
         "Generating suggested questions..."
     )
-
 
     suggested_questions = (
         generate_document_suggestions(
@@ -283,36 +257,27 @@ async def upload_document(
         )
     )
 
-
     print(
         "Suggested questions:",
         suggested_questions
     )
 
-
     # -----------------------------------------------------
-    # Get saved document metadata
+    # Get saved document
     # -----------------------------------------------------
 
     document = retriever.get_document(
         document_id
     )
 
-
     # -----------------------------------------------------
     # Return response
     # -----------------------------------------------------
 
     return {
-
-        "message":
-            "Document processed successfully",
-
-        "document":
-            document,
-
-        "suggested_questions":
-            suggested_questions
+        "message": "Document processed successfully",
+        "document": document,
+        "suggested_questions": suggested_questions
     }
 
 
@@ -324,9 +289,7 @@ async def upload_document(
 def get_documents():
 
     return {
-
-        "documents":
-            retriever.list_documents()
+        "documents": retriever.list_documents()
     }
 
 
@@ -343,7 +306,6 @@ def get_document(
         document_id
     )
 
-
     if document is None:
 
         raise HTTPException(
@@ -351,11 +313,8 @@ def get_document(
             detail="Document not found."
         )
 
-
     return {
-
-        "document":
-            document
+        "document": document
     }
 
 
@@ -368,10 +327,11 @@ def delete_document(
     document_id: str
 ):
 
+    global suggested_questions
+
     document = retriever.get_document(
         document_id
     )
-
 
     if document is None:
 
@@ -379,7 +339,6 @@ def delete_document(
             status_code=404,
             detail="Document not found."
         )
-
 
     # -----------------------------------------------------
     # Delete physical PDF
@@ -389,27 +348,20 @@ def delete_document(
         "path"
     )
 
-
     if file_path:
 
-        if not os.path.isabs(
-            file_path
-        ):
+        if not os.path.isabs(file_path):
 
             file_path = os.path.join(
-                "",
+                PROJECT_ROOT,
                 file_path
             )
 
-
-        if os.path.exists(
-            file_path
-        ):
+        if os.path.exists(file_path):
 
             os.remove(
                 file_path
             )
-
 
     # -----------------------------------------------------
     # Remove from vectorstore
@@ -419,25 +371,17 @@ def delete_document(
         document_id
     )
 
-
     # -----------------------------------------------------
-    # Clear suggestions if no documents remain
+    # Clear suggestions
     # -----------------------------------------------------
-
-    global suggested_questions
 
     if not retriever.list_documents():
 
         suggested_questions = []
 
-
     return {
-
-        "message":
-            "Document deleted successfully",
-
-        "document_id":
-            document_id
+        "message": "Document deleted successfully",
+        "document_id": document_id
     }
 
 
@@ -449,9 +393,7 @@ def delete_document(
 def get_suggestions():
 
     return {
-
-        "suggested_questions":
-            suggested_questions
+        "suggested_questions": suggested_questions
     }
 
 
@@ -471,17 +413,10 @@ async def ask_question(
     if not question.strip():
 
         return {
-
-            "question":
-                question,
-
-            "answer":
-                "Please enter a question.",
-
-            "sources":
-                []
+            "question": question,
+            "answer": "Please enter a question.",
+            "sources": []
         }
-
 
     # -----------------------------------------------------
     # Check vectorstore
@@ -490,17 +425,10 @@ async def ask_question(
     if retriever.index is None:
 
         return {
-
-            "question":
-                question,
-
-            "answer":
-                "Please upload a document first.",
-
-            "sources":
-                []
+            "question": question,
+            "answer": "Please upload a document first.",
+            "sources": []
         }
-
 
     # -----------------------------------------------------
     # Create question embedding
@@ -510,9 +438,8 @@ async def ask_question(
         [question]
     )[0]
 
-
     # -----------------------------------------------------
-    # Search relevant document chunks
+    # Search relevant chunks
     # -----------------------------------------------------
 
     results = retriever.search(
@@ -520,21 +447,16 @@ async def ask_question(
         top_k=5
     )
 
-
     if not results:
 
         return {
-
-            "question":
-                question,
-
-            "answer":
-                "I could not find relevant information in the documents.",
-
-            "sources":
-                []
+            "question": question,
+            "answer": (
+                "I could not find relevant information "
+                "in the documents."
+            ),
+            "sources": []
         }
-
 
     # -----------------------------------------------------
     # Create structured context
@@ -542,11 +464,9 @@ async def ask_question(
 
     context_parts = []
 
-
     for result in results:
 
         context_parts.append(
-
             f"""
 DOCUMENT: {result["document_name"]}
 
@@ -557,11 +477,9 @@ CONTENT:
 """
         )
 
-
     context = "\n\n".join(
         context_parts
     )
-
 
     # -----------------------------------------------------
     # Generate answer
@@ -572,19 +490,12 @@ CONTENT:
         context
     )
 
-
     # -----------------------------------------------------
-    # Return answer + sources
+    # Return response
     # -----------------------------------------------------
 
     return {
-
-        "question":
-            question,
-
-        "answer":
-            answer,
-
-        "sources":
-            results
+        "question": question,
+        "answer": answer,
+        "sources": results
     }
