@@ -1,7 +1,27 @@
-from sentence_transformers import SentenceTransformer
+import os
+import numpy as np
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+load_dotenv()
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_DIMENSION = 768
 
 
 def create_embeddings(chunks):
-    return model.encode(chunks, convert_to_numpy=True)
+    result = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=chunks,
+        config=types.EmbedContentConfig(
+            output_dimensionality=EMBEDDING_DIMENSION
+        )
+    )
+
+    return np.array(
+        [embedding.values for embedding in result.embeddings],
+        dtype=np.float32
+    )
