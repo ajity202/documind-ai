@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+data/uploads/*
+vectorstore/faiss_index/*
