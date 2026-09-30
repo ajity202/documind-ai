@@ -10,8 +10,19 @@ class Retriever:
 
     def __init__(
         self,
-        folder="vectorstore/faiss_index"
+        folder=None
     ):
+
+        # -------------------------------------------------
+        # Use writable storage on Vercel
+        # -------------------------------------------------
+
+        if folder is None:
+
+            if os.getenv("VERCEL"):
+                folder = "/tmp/vectorstore/faiss_index"
+            else:
+                folder = "vectorstore/faiss_index"
 
         self.folder = folder
 
@@ -82,9 +93,7 @@ class Retriever:
                         encoding="utf-8"
                     ) as file:
 
-                        self.documents = json.load(
-                            file
-                        )
+                        self.documents = json.load(file)
 
                 return True
 
@@ -386,7 +395,6 @@ class Retriever:
             if not text:
                 continue
 
-            # Exact duplicate
             if text in seen_text:
                 continue
 
@@ -421,11 +429,6 @@ class Retriever:
             [query_embedding],
             dtype="float32"
         )
-
-        # -------------------------------------------------
-        # Retrieve more candidates than needed.
-        # This gives us room to remove duplicates.
-        # -------------------------------------------------
 
         candidate_k = min(
             max(
@@ -468,19 +471,11 @@ class Retriever:
                 item
             )
 
-        # -------------------------------------------------
-        # Remove duplicate chunks
-        # -------------------------------------------------
-
         candidates = (
             self._remove_duplicate_results(
                 candidates
             )
         )
-
-        # -------------------------------------------------
-        # Return only requested number
-        # -------------------------------------------------
 
         return candidates[:top_k]
 
