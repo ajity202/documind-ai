@@ -5,6 +5,7 @@ import os
 import sys
 import uuid
 
+
 # =========================================================
 # PYTHON PATH
 # =========================================================
@@ -52,14 +53,26 @@ app.add_middleware(
 # CONFIGURATION
 # =========================================================
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
 
+# Vercel filesystem is read-only except /tmp
 if os.getenv("VERCEL"):
     UPLOAD_DIR = "/tmp/uploads"
 else:
-    UPLOAD_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
+    UPLOAD_DIR = os.path.join(
+        PROJECT_ROOT,
+        "data",
+        "uploads"
+    )
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(
+    UPLOAD_DIR,
+    exist_ok=True
+)
 
 
 # =========================================================
@@ -93,6 +106,7 @@ def home():
 # =========================================================
 
 @app.post("/upload")
+@app.post("/api/upload")
 async def upload_document(
     file: UploadFile = File(...)
 ):
@@ -278,6 +292,7 @@ async def upload_document(
 # =========================================================
 
 @app.get("/documents")
+@app.get("/api/documents")
 def get_documents():
 
     return {
@@ -290,6 +305,7 @@ def get_documents():
 # =========================================================
 
 @app.get("/documents/{document_id}")
+@app.get("/api/documents/{document_id}")
 def get_document(
     document_id: str
 ):
@@ -315,6 +331,7 @@ def get_document(
 # =========================================================
 
 @app.delete("/documents/{document_id}")
+@app.delete("/api/documents/{document_id}")
 def delete_document(
     document_id: str
 ):
@@ -342,17 +359,39 @@ def delete_document(
 
     if file_path:
 
-        if not os.path.isabs(file_path):
+        # If an absolute path was stored,
+        # use it directly.
+        if os.path.isabs(file_path):
 
-            file_path = os.path.join(
+            actual_file_path = file_path
+
+        else:
+
+            # Local fallback
+            actual_file_path = os.path.join(
                 PROJECT_ROOT,
                 file_path
             )
 
-        if os.path.exists(file_path):
+            # Vercel fallback
+            if (
+                os.getenv("VERCEL")
+                and not os.path.exists(actual_file_path)
+            ):
+
+                filename = os.path.basename(
+                    file_path
+                )
+
+                actual_file_path = os.path.join(
+                    UPLOAD_DIR,
+                    filename
+                )
+
+        if os.path.exists(actual_file_path):
 
             os.remove(
-                file_path
+                actual_file_path
             )
 
     # -----------------------------------------------------
@@ -382,6 +421,7 @@ def delete_document(
 # =========================================================
 
 @app.get("/suggestions")
+@app.get("/api/suggestions")
 def get_suggestions():
 
     return {
@@ -394,6 +434,7 @@ def get_suggestions():
 # =========================================================
 
 @app.post("/ask")
+@app.post("/api/ask")
 async def ask_question(
     question: str
 ):
